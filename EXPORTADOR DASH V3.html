@@ -2530,8 +2530,393 @@
     </script>
 
     <script>
-        // A SER PREENCHIDO NA PARTE 3
+        document.addEventListener('DOMContentLoaded', () => {
+            const salesFileInput = document.getElementById('sales-file-input');
+            const clientsFileInput = document.getElementById('clients-file-input');
+            const productsFileInput = document.getElementById('products-file-input');
+            const historyFileInput = document.getElementById('history-file-input');
+            const generateBtn = document.getElementById('generate-btn');
+            
+            const statusContainer = document.getElementById('status-container');
+            const statusText = document.getElementById('status-text');
+            const progressBar = document.getElementById('progress-bar');
+
+            const downloadContainer = document.getElementById('download-container');
+            const downloadLink = document.getElementById('download-link');
+            
+            let files = {};
+
+            const checkFiles = () => {
+                generateBtn.disabled = !(files.salesFile && files.clientsFile && files.productsFile && files.historyFile);
+                downloadContainer.classList.add('hidden');
+            };
+
+            salesFileInput.addEventListener('change', (e) => { files.salesFile = e.target.files[0]; checkFiles(); });
+            clientsFileInput.addEventListener('change', (e) => { files.clientsFile = e.target.files[0]; checkFiles(); });
+            productsFileInput.addEventListener('change', (e) => { files.productsFile = e.target.files[0]; checkFiles(); });
+            historyFileInput.addEventListener('change', (e) => { files.historyFile = e.target.files[0]; checkFiles(); });
+
+            const workerScript = document.getElementById('worker-script').textContent;
+            const workerBlob = new Blob([workerScript], { type: 'application/javascript' });
+            const workerUrl = URL.createObjectURL(workerBlob);
+            const worker = new Worker(workerUrl);
+
+            worker.onmessage = (event) => {
+                const { type, status, percentage, data, message } = event.data;
+
+                if (type === 'progress') {
+                    statusText.textContent = status;
+                    progressBar.style.width = `${percentage}%`;
+                } else if (type === 'result') {
+                    statusText.textContent = 'O seu relatório está pronto!';
+                    progressBar.style.width = '100%';
+                    generateReportFile(data);
+                    downloadContainer.classList.remove('hidden');
+                    generateBtn.disabled = false;
+                } else if (type === 'error') {
+                    statusContainer.classList.remove('hidden');
+                    statusText.innerHTML = `<p class="text-red-500">Erro: ${message}</p>`;
+                    progressBar.style.width = '0%';
+                    generateBtn.disabled = false;
+                }
+            };
+
+            generateBtn.addEventListener('click', () => {
+                if (!files.salesFile || !files.clientsFile || !files.productsFile || !files.historyFile) return;
+                
+                generateBtn.disabled = true;
+                statusContainer.classList.remove('hidden');
+                statusText.textContent = 'A iniciar o processamento...';
+                progressBar.style.width = '0%';
+                downloadContainer.classList.add('hidden');
+                
+                worker.postMessage({
+                    salesFile: files.salesFile,
+                    clientsFile: files.clientsFile,
+                    productsFile: files.productsFile,
+                    historyFile: files.historyFile
+                });
+            });
+
+            function generateReportFile(data) {
+                const jsonDataString = JSON.stringify(data);
+                const generationDate = new Date().toLocaleString('pt-BR');
+                
+                const scriptLogic = document.getElementById('report-logic-script').textContent;
+                
+                const reportTemplate = `
+                    <!DOCTYPE html>
+                    <html lang="pt-br">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>PRIME DISTRIBUIÇÃO</title>
+                        <link rel="icon" type="image/jpeg" href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSnaaZ2WnZBJIxPRfabS4Ug78PKK6Gu3nbHlw&s">
+                        <script src="https://cdn.tailwindcss.com"><\/script>
+                        <script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
+                        <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"><\/script>
+                        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+                        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"><\/script>
+                        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                        <style> body { font-family: 'Inter', sans-serif; } ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #0f172a; } ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; } ::-webkit-scrollbar-corner { background: #0f172a; } .sticky-header th { position: sticky; top: 0; z-index: 10; background-color: #1e293b; } .hidden { display: none; } .metric-btn.active, .fornecedor-btn.active, .comparison-toggle-btn.active, .group-btn.active, #main-rede-group-container > div > button.active, #city-rede-group-container > div > button.active, #comparison-rede-group-container > div > button.active { background-color: #0d9488; color: #FFF; } .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; } .tooltip { position: relative; display: inline-block; cursor: pointer; } .tooltip .tooltip-text { visibility: hidden; width: 220px; background-color: #1e293b; color: #fff; border-radius: 6px; padding: 8px; position: absolute; z-index: 1001; bottom: 125%; left: 50%; margin-left: -110px; opacity: 0; transition: opacity 0.3s; pointer-events: none; } .tooltip:hover .tooltip-text { visibility: visible; opacity: 1; } .custom-scrollbar::-webkit-scrollbar { width: 8px; } .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; } .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 10px; } </style>
+                    </head>
+                    <body class="bg-slate-900 text-slate-200 antialiased">
+                        <div id="main-dashboard">
+                            <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+                                <header class="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                    <div class="text-center sm:text-left"><h1 class="text-2xl font-bold text-white"><span style="color: #FFC000;">PRIME</span> DISTRIBUIÇÃO</h1><p class="text-slate-400 mt-1">Dados atualizados em: ${generationDate}</p></div>
+                                    <div class="flex gap-4 sm:gap-6 items-center"><div class="text-right"><p class="text-slate-400 text-sm">Peso Total</p><p id="total-peso" class="text-xl sm:text-2xl font-bold text-emerald-400">0,000 Ton</p></div><div class="text-right"><p class="text-slate-400 text-sm">Faturamento Total</p><p id="total-vendas" class="text-xl sm:text-2xl font-bold text-emerald-400">R$ 0,00</p></div></div>
+                                </header>
+                                <div class="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                    <div id="fornecedor-toggle-container" class="w-full sm:w-auto rounded-lg p-1 flex justify-center sm:justify-start gap-2"><button data-fornecedor="PEPSICO" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1 sm:flex-none">PEPSICO</button><button data-fornecedor="MULTIMARCAS" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1 sm:flex-none">MULTIMARCAS</button></div>
+                                    <div class="flex gap-2 w-full sm:w-auto"><button id="viewChartBtn" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Ver Gráficos</button><button id="viewTableBtn" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg hidden">Ver Tabela</button><button id="viewComparisonBtn" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg">Ver Comparativo</button><button id="viewStockBtn" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg">Estoque</button></div>
+                                </div>
+                                <div id="main-filters" class="mb-6 p-4 bg-slate-800 rounded-lg shadow-md">
+                                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                                        <div id="main-rede-filter-wrapper" class="relative">
+                                            <label class="block mb-2 text-sm font-medium text-slate-300">Rede</label>
+                                            <div id="main-rede-group-container" class="inline-flex rounded-md shadow-sm" role="group">
+                                                <button type="button" data-group="" class="group-btn active py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-l-lg hover:bg-slate-500">Todos</button>
+                                                <button type="button" data-group="com_rede" id="main-com-rede-btn" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 hover:bg-slate-500 border-t border-b border-slate-700 flex items-center gap-2">
+                                                    <span id="main-com-rede-btn-text">Com Rede</span>
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                </button>
+                                                <button type="button" data-group="sem_rede" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-r-lg hover:bg-slate-500">Sem Rede</button>
+                                            </div>
+                                            <div id="main-rede-filter-dropdown" class="hidden absolute z-20 w-56 mt-1 top-full left-0 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar text-left"></div>
+                                        </div>
+                                        <div><label for="supervisor-filter" class="block mb-2 text-sm font-medium text-slate-300">Filtrar Supervisor</label><select id="supervisor-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white"><option value="">Todos</option></select></div>
+                                        <div class="relative"><label for="vendedor-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Filtrar Vendedor</label><button id="vendedor-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center"><span id="vendedor-filter-text">Todos Vendedores</span><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></button><div id="vendedor-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar"></div></div>
+                                        <div><label for="codcli-filter" class="block mb-2 text-sm font-medium text-slate-300">Filtrar Cód. Cliente</label><input type="text" id="codcli-filter" placeholder="Digite o código..." class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white"></div>
+                                        <div><label for="posicao-filter" class="block mb-2 text-sm font-medium text-slate-300">Filtrar Posição</label><select id="posicao-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white"><option value="">Todas</option><option value="L">Liberado</option><option value="M">Montado</option><option value="F">Faturado</option></select></div>
+                                        <div class="md:col-start-5"><button id="clear-filters-btn" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-lg">Limpar Filtros</button></div>
+                                    </div>
+                                </div>
+                                <main id="app-container">
+                                    <div id="chartView" class="hidden">
+                                        <div class="mb-6 bg-slate-800 p-4 rounded-lg">
+                                            <div class="flex justify-between items-center mb-4">
+                                                <div class="w-1/3">
+                                                    <label for="main-holiday-picker-btn" class="block mb-2 text-sm font-medium text-slate-400">Feriados do Mês</label>
+                                                    <button id="main-holiday-picker-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left">Selecionar Feriados</button>
+                                                </div>
+                                                <div class="w-1/3 text-center">
+                                                    <h2 class="text-lg font-semibold text-white">Tendência de Faturamento</h2>
+                                                </div>
+                                                <div class="w-1/3"></div>
+                                            </div>
+                                            <div id="trendChartContainer" class="relative h-80"></div>
+                                        </div>
+                                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="bg-slate-800 p-4 rounded-lg"><h2 id="sales-by-person-title" class="text-lg font-semibold text-white mb-4 text-center">Vendas por Supervisor</h2><div id="salesByPersonChartContainer" class="relative h-80"></div></div><div class="bg-slate-800 p-4 rounded-lg"><h2 id="faturamentoPorFornecedorTitle" class="text-lg font-semibold text-white mb-4 text-center">Faturamento por Categoria</h2><div id="faturamentoPorFornecedorChartContainer" class="relative h-80"></div></div></div>
+                                        <div class="mt-6 bg-slate-800 p-4 rounded-lg"><div class="flex justify-between items-center mb-4"><h2 class="text-lg font-semibold text-white">Vendas por Produto</h2><div class="bg-slate-700 rounded-lg p-1 flex"><button id="faturamentoBtn" class="metric-btn active px-3 py-1 text-sm rounded-md">Faturamento</button><button id="pesoBtn" class="metric-btn px-3 py-1 text-sm rounded-md">Peso Kg</button></div></div><div id="salesByProductBarChartContainer" class="relative h-80"></div></div>
+                                        <div class="mt-6 space-y-3"><button id="show-weekly-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg">Gráficos Semanais</button><button id="show-city-btn" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg">Gráficos por Cidade</button></div>
+                                    </div>
+                                    <div id="tableView" class=""><div class="overflow-x-auto bg-slate-800 rounded-lg" style="max-height: 60vh;"><table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase sticky-header"><tr><th class="px-4 py-3">Nº Pedido</th><th class="px-4 py-3">Cód. Cliente</th><th class="px-4 py-3">Vendedor</th><th class="px-4 py-3">Fornecedor</th><th class="px-4 py-3">Data Pedido</th><th class="px-4 py-3">Data Fat.</th><th class="px-4 py-3 text-right">Peso Total</th><th class="px-4 py-3 text-right">Faturamento Total</th><th class="px-4 py-3 text-center">Posição</th></tr></thead><tbody id="report-table-body" class="divide-y divide-slate-700"></tbody></table></div></div>
+                                </main>
+                            </div>
+                        </div>
+                        <div id="city-view" class="hidden container mx-auto p-4 sm:p-6 lg:p-8">
+                            <div id="city-view-loader" class="text-center p-16"><p class="text-lg text-slate-400">Carregando dados...</p></div>
+                            <div id="city-view-content" class="hidden">
+                                <div class="flex justify-between items-center mb-6"><div><h1 class="text-2xl font-bold text-white"><span style="color: #FFC000;">PRIME</span> DISTRIBUIÇÃO</h1><p class="text-lg text-slate-300 -mt-1">Análise de Vendas por Cidade</p></div><button id="back-to-main-from-city-btn" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Voltar ao Dashboard</button></div>
+                                <div class="mb-6 p-4 bg-slate-800 rounded-lg shadow-md">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                                        <div id="city-rede-filter-wrapper" class="relative">
+                                            <label class="block mb-2 text-sm font-medium text-slate-300">Rede</label>
+                                            <div id="city-rede-group-container" class="inline-flex rounded-md shadow-sm" role="group">
+                                                <button type="button" data-group="" class="group-btn active py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-l-lg hover:bg-slate-500">Todos</button>
+                                                <div class="relative">
+                                                    <button type="button" data-group="com_rede" id="city-com-rede-btn" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 hover:bg-slate-500 border-t border-b border-slate-700 flex items-center justify-center gap-2">
+                                                        <span id="city-com-rede-btn-text">Com Rede</span>
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                    </button>
+                                                    <div id="city-rede-filter-dropdown" class="hidden absolute z-20 w-56 mt-1 top-full left-0 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar text-left"></div>
+                                                </div>
+                                                <button type="button" data-group="sem_rede" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-r-lg hover:bg-slate-500">Sem Rede</button>
+                                            </div>
+                                        </div>
+                                        <div><label for="city-supervisor-filter" class="block mb-2 text-sm font-medium text-slate-300">Supervisor</label><select id="city-supervisor-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white"><option value="">Todos</option></select></div>
+                                        <div class="relative"><label for="city-vendedor-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Vendedor</label><button id="city-vendedor-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center"><span id="city-vendedor-filter-text">Todos</span><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></button><div id="city-vendedor-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar"></div></div>
+                                        <div class="relative"><label for="city-name-filter" class="block mb-2 text-sm font-medium text-slate-300">Cidade</label><input type="text" id="city-name-filter" placeholder="Digite a cidade..." class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white" autocomplete="off"><div id="city-suggestions" class="absolute z-10 w-full bg-slate-700 border border-slate-600 rounded-lg mt-1 hidden max-h-48 overflow-y-auto custom-scrollbar"></div></div>
+                                        <div><label for="city-codcli-filter" class="block mb-2 text-sm font-medium text-slate-300">Cód. Cliente</label><input type="text" id="city-codcli-filter" placeholder="Digite o código..." class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white"></div>
+                                    </div>
+                                    <div class="mt-4 flex justify-center">
+                                        <button id="clear-city-filters-btn" class="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-lg">Limpar Filtros</button>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6"><div class="bg-slate-800 p-4 rounded-lg"><div class="flex justify-between items-center mb-4"><div class="w-1/4"><span class="text-xl font-bold text-cyan-400">Top 10</span></div><div class="w-1/2 text-center"><h2 id="city-chart-title" class="text-lg font-semibold text-white"></h2></div><div class="w-1/4 text-right"><p class="text-slate-400 text-sm">Total Vendido</p><p id="total-faturamento-cidade" class="text-xl font-bold text-emerald-400">R$ 0,00</p></div></div><div id="salesByClientInCityChartContainer" class="relative h-96"></div></div><div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white mb-4 text-center">Status dos Clientes</h2><div id="customerStatusChartContainer" class="relative h-96 flex items-center justify-center"></div></div></div>
+                                <div class="bg-slate-800 p-4 rounded-lg mt-6"><div class="flex justify-between items-center mb-4 px-4"><h3 class="text-lg font-semibold text-white">Clientes Ativos no Mês</h3><button id="export-active-pdf-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Exportar Relatório</button></div><div class="overflow-x-auto" style="max-height: 40vh;"><table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase sticky-header"><tr><th class="px-4 py-3">Código</th><th class="px-4 py-3">Nome Fantasia</th><th class="px-4 py-3 text-right">Faturamento</th><th class="px-4 py-3">Cidade</th><th class="px-4 py-3">Bairro</th><th class="px-4 py-3">RCA 1</th><th class="px-4 py-3">RCA 2</th></tr></thead><tbody id="city-active-detail-table-body" class="divide-y divide-slate-700"></tbody></table></div></div>
+                                <div class="bg-slate-800 p-4 rounded-lg mt-6"><div class="flex justify-between items-center mb-4 px-4"><h3 class="text-lg font-semibold text-white">Clientes S/ Vendas no Mês</h3><button id="export-inactive-pdf-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Exportar Relatório</button></div><div class="overflow-x-auto" style="max-height: 40vh;"><table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase sticky-header"><tr><th class="px-4 py-3">Código</th><th class="px-4 py-3">Nome Fantasia</th><th class="px-4 py-3">Cidade</th><th class="px-4 py-3">Bairro</th><th class="px-4 py-3 text-center">Última Compra</th><th class="px-4 py-3">RCA 1</th><th class="px-4 py-3">RCA 2</th></tr></thead><tbody id="city-inactive-detail-table-body" class="divide-y divide-slate-700"></tbody></table></div></div>
+                            </div>
+                        </div>
+                        <div id="weekly-view" class="hidden container mx-auto p-4 sm:p-6 lg:p-8">
+                            <div class="flex justify-between items-center mb-6"><div><h1 class="text-2xl font-bold text-white"><span style="color: #FFC000;">PRIME</span> DISTRIBUIÇÃO</h1><p class="text-lg text-slate-300 -mt-1">Acompanhamento Semanal</p></div><button id="back-to-main-from-weekly-btn" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Voltar ao Dashboard</button></div>
+                            <div class="mb-6 p-4 bg-slate-800 rounded-lg shadow-md"><div class="flex flex-col sm:flex-row justify-between items-center gap-4"><div id="weekly-fornecedor-toggle-container" class="w-full sm:w-auto rounded-lg p-1 flex justify-center sm:justify-start gap-2"><button data-fornecedor="PEPSICO" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1 sm:flex-none">PEPSICO</button><button data-fornecedor="MULTIMARCAS" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1 sm:flex-none">MULTIMARCAS</button></div><button id="clear-weekly-filters-btn" class="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-lg">Limpar Filtros</button></div><div class="mt-4"><label class="block text-sm font-medium text-slate-300 mb-2">Filtrar Supervisores</label><div id="weekly-supervisor-filter" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"></div></div></div>
+                            <div class="grid grid-cols-1 gap-6"><div class="bg-slate-800 p-4 rounded-lg"><div class="flex justify-between items-center mb-4"><h2 class="text-lg font-semibold text-white text-center">Faturamento Mensal por Dia da Semana</h2><div class="text-right"><p class="text-slate-400 text-sm">Total do Mês</p><p id="total-mes-semanal" class="text-xl font-bold text-emerald-400">R$ 0,00</p></div></div><div id="weeklySalesChartContainer" class="relative h-96"></div><div class="mt-6 border-t border-slate-700 pt-4"><h3 class="text-md font-semibold text-white mb-3 text-center">Resumo de Faturamento Semanal</h3><div class="overflow-x-auto"><table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase"><tr><th class="px-4 py-2 bg-slate-700/50 rounded-l-lg">Semana</th><th class="px-4 py-2 bg-slate-700/50 text-right rounded-r-lg">Faturamento Total</th></tr></thead><tbody id="weekly-summary-table-body" class="divide-y divide-slate-700"></tbody></table></div></div></div><div class="grid grid-cols-1 gap-6"><div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white mb-4 text-center">Ranking de Positivação</h2><div id="positivacaoChartContainer" class="relative h-80"></div></div><div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white mb-4 text-center">Ranking de Mix de Produtos (Por PDV)</h2><div id="mixChartContainer" class="relative h-80"></div></div></div><div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white mb-4 text-center">Top 10 Vendedores (Faturamento)</h2><div id="topSellersChartContainer" class="relative h-80"></div></div></div></div>
+                        </div>
+                        <div id="comparison-view" class="hidden container mx-auto p-4 sm:p-6 lg:p-8">
+                            <div class="flex justify-between items-center mb-6"><div><h1 class="text-2xl font-bold text-white"><span style="color: #FFC000;">PRIME</span> DISTRIBUIÇÃO</h1><p class="text-lg text-slate-300 -mt-1">Comparativo entre Meses</p></div><button id="back-to-main-from-comparison-btn" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Voltar ao Dashboard</button></div>
+                            <div class="mb-6 p-4 bg-slate-800 rounded-lg shadow-md">
+                                <div id="comparison-rede-filter-wrapper" class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
+                                    <div class="relative w-full sm:w-1/2">
+                                        <label class="block mb-2 text-sm font-medium text-slate-300">Rede</label>
+                                        <div id="comparison-rede-group-container" class="inline-flex rounded-md shadow-sm w-full" role="group">
+                                            <button type="button" data-group="" class="group-btn active py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-l-lg hover:bg-slate-500 flex-1">Todos</button>
+                                            <button type="button" data-group="com_rede" id="comparison-com-rede-btn" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 hover:bg-slate-500 border-t border-b border-slate-700 flex items-center justify-center gap-2 flex-1">
+                                                <span id="comparison-com-rede-btn-text">Com Rede</span>
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                            </button>
+                                            <button type="button" data-group="sem_rede" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-r-lg hover:bg-slate-500 flex-1">Sem Rede</button>
+                                        </div>
+                                        <div id="comparison-rede-filter-dropdown" class="hidden absolute z-20 w-full mt-1 top-full left-0 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar text-left"></div>
+                                    </div>
+                                    <div class="w-full sm:w-1/2">
+                                        <label class="block mb-2 text-sm font-medium text-slate-300">Pasta</label>
+                                        <div id="comparison-fornecedor-toggle-container" class="w-full rounded-lg p-1 flex justify-center gap-2">
+                                            <button data-fornecedor="PEPSICO" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1">PEPSICO</button>
+                                            <button data-fornecedor="MULTIMARCAS" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1">MULTIMARCAS</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                    <div>
+                                        <label for="comparison-supervisor-filter" class="block mb-2 text-sm font-medium text-slate-300">Supervisor</label>
+                                        <select id="comparison-supervisor-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="relative">
+                                        <label for="comparison-vendedor-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Vendedor</label>
+                                        <button id="comparison-vendedor-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center">
+                                            <span id="comparison-vendedor-filter-text">Todos</span>
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </button>
+                                        <div id="comparison-vendedor-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar"></div>
+                                    </div>
+                                    <div class="relative">
+                                        <label for="comparison-supplier-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Fornecedor</label>
+                                        <button id="comparison-supplier-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center">
+                                            <span id="comparison-supplier-filter-text">Todos Fornecedores</span>
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </button>
+                                        <div id="comparison-supplier-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar"></div>
+                                    </div>
+                                    <div class="relative">
+                                        <label for="comparison-city-filter" class="block mb-2 text-sm font-medium text-slate-300">Cidade</label>
+                                        <input type="text" id="comparison-city-filter" placeholder="Digite a cidade..." class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white" autocomplete="off">
+                                        <div id="comparison-city-suggestions" class="absolute z-10 w-full bg-slate-700 border border-slate-600 rounded-lg mt-1 hidden max-h-48 overflow-y-auto custom-scrollbar"></div>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 mt-4">
+                                    <div class="relative">
+                                        <label for="comparison-product-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Filtrar por Produto</label>
+                                        <button id="comparison-product-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center">
+                                            <span id="comparison-product-filter-text">Todos os Produtos</span>
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </button>
+                                        <div id="comparison-product-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg">
+                                            <div class="p-2 border-b border-slate-600">
+                                                <input type="text" id="comparison-product-search-input" placeholder="Buscar produto..." class="bg-slate-800 text-xs rounded-lg block w-full p-2 border border-slate-600 placeholder-slate-400 text-white">
+                                            </div>
+                                            <div id="comparison-product-list" class="max-h-60 overflow-y-auto custom-scrollbar">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end border-t border-slate-700 pt-4 mt-4">
+                                    <div class="flex items-end"><div class="w-full"><label for="comparison-holiday-picker-btn" class="block mb-2 text-sm font-medium text-slate-400">Feriados do Mês</label><button id="comparison-holiday-picker-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left">Selecionar Feriados</button></div></div>
+                                    <button id="comparison-tendency-toggle" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-4 rounded-lg">Calcular Tendência</button>
+                                    <button id="clear-comparison-filters-btn" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-lg">Limpar Filtros</button>
+                                </div>
+                            </div>
+                            <div id="comparison-kpi-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6"></div>
+                            <div class="grid grid-cols-1 gap-6">
+                                <div class="bg-slate-800 p-4 rounded-lg">
+                                    <div class="flex justify-center items-center mb-4 relative">
+                                        <h2 id="comparison-chart-title" class="text-lg font-semibold text-white text-center">Comparativo de Faturamento Semanal</h2>
+                                        <div class="absolute right-0 top-0 bottom-0 flex items-center">
+                                            <div id="comparison-chart-toggle" class="flex bg-slate-700 rounded-lg p-1">
+                                                <button id="toggle-weekly-btn" class="comparison-toggle-btn active px-3 py-1 text-sm rounded-md">Semanal</button>
+                                                <button id="toggle-monthly-btn" class="comparison-toggle-btn px-3 py-1 text-sm rounded-md">Mensal</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="weeklyComparisonChartContainer" class="relative h-96"></div>
+                                    <div id="monthlyComparisonChartContainer" class="relative h-96 hidden"></div>
+                                </div>
+                                <div class="bg-slate-800 p-4 rounded-lg">
+                                    <h2 class="text-lg font-semibold text-white text-center mb-4">Faturamento por Dia da Semana</h2>
+                                    <div id="dailyWeeklyComparisonChartContainer" class="relative h-96"></div>
+                                </div>
+                                <div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white text-center mb-4">Variação de Faturamento por Supervisor</h2><div class="overflow-x-auto" style="max-height: 40vh;"><table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase sticky-header"><tr><th class="px-4 py-3">Supervisor</th><th class="px-4 py-3 text-right">Média Trim.</th><th class="px-4 py-3 text-right">Fat. Mês Atual</th><th class="px-4 py-3 text-right">Variação</th></tr></thead><tbody id="supervisorComparisonTableBody" class="divide-y divide-slate-700"></tbody></table></div></div>
+                            </div>
+                        </div>
+                        <!-- NOVA VIEW DE ESTOQUE -->
+                        <div id="stock-view" class="hidden container mx-auto p-4 sm:p-6 lg:p-8">
+                            <div class="flex justify-between items-center mb-6">
+                                <div><h1 class="text-2xl font-bold text-white"><span style="color: #FFC000;">PRIME</span> DISTRIBUIÇÃO</h1><p class="text-lg text-slate-300 -mt-1">Análise de Estoque</p></div>
+                                <button id="back-to-main-from-stock-btn" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Voltar ao Dashboard</button>
+                            </div>
+                            <div class="mb-6 p-4 bg-slate-800 rounded-lg shadow-md">
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                                     <div>
+                                        <label for="stock-filial-filter" class="block mb-2 text-sm font-medium text-slate-300">Filtrar Estoque Filial</label>
+                                        <select id="stock-filial-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white">
+                                            <option value="ambas" selected>Ambas</option>
+                                            <option value="05">Filial 05</option>
+                                            <option value="08">Filial 08</option>
+                                        </select>
+                                    </div>
+                                    <div class="relative">
+                                        <label for="stock-supplier-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Fornecedor</label>
+                                        <button id="stock-supplier-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center">
+                                            <span id="stock-supplier-filter-text">Todos Fornecedores</span>
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </button>
+                                        <div id="stock-supplier-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar"></div>
+                                    </div>
+                                    <div class="relative">
+                                        <label for="stock-product-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Produto</label>
+                                        <button id="stock-product-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center">
+                                            <span id="stock-product-filter-text">Todos os Produtos</span>
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </button>
+                                        <div id="stock-product-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg">
+                                            <div class="p-2 border-b border-slate-600">
+                                                <input type="text" id="stock-product-search-input" placeholder="Buscar produto..." class="bg-slate-800 text-xs rounded-lg block w-full p-2 border border-slate-600 placeholder-slate-400 text-white">
+                                            </div>
+                                            <div id="stock-product-list" class="max-h-60 overflow-y-auto custom-scrollbar"></div>
+                                        </div>
+                                    </div>
+                                    <button id="clear-stock-filters-btn" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-lg">Limpar Filtros</button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                                <div class="lg:col-span-2 bg-slate-800 p-4 rounded-lg">
+                                    <h2 class="text-lg font-semibold text-white text-center mb-4">Análise de Estoque e Tendência de Saída</h2>
+                                    <div class="overflow-x-auto" style="max-height: 60vh;">
+                                        <table class="min-w-full text-sm text-left">
+                                            <thead class="text-xs text-slate-300 uppercase sticky-header">
+                                                <tr>
+                                                    <th class="px-4 py-3">Produto</th>
+                                                    <th class="px-4 py-3">Fornecedor</th>
+                                                    <th class="px-4 py-3 text-right">Estoque Atual (Emb.)</th>
+                                                    <th class="px-4 py-3 text-right">Venda Média Mensal (Emb.)</th>
+                                                    <th class="px-4 py-3 text-right">Tendência (Dias)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="stock-analysis-table-body" class="divide-y divide-slate-700"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="space-y-6">
+                                    <div class="bg-slate-800 p-4 rounded-lg">
+                                        <h2 class="text-lg font-semibold text-white text-center mb-4">Top 10 Estoque por Fornecedor</h2>
+                                        <div id="stockBySupplierChartContainer" class="relative h-80"></div>
+                                    </div>
+                                    <div class="bg-slate-800 p-4 rounded-lg">
+                                        <h2 class="text-lg font-semibold text-white text-center mb-4">Top 10 Produtos Críticos (Estoque Baixo)</h2>
+                                        <div id="criticalStockChartContainer" class="relative h-80"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="order-details-modal" class="modal-overlay hidden"><div class="bg-slate-800 rounded-lg shadow-2xl max-w-4xl w-full m-4"><div class="p-6 border-b border-slate-700 flex justify-between items-center"><h2 class="text-xl font-bold text-white">Detalhes do Pedido <span id="modal-pedido-id"></span></h2><button id="modal-close-btn" class="text-slate-400 hover:text-white text-3xl">&times;</button></div><div id="modal-header-info" class="p-6 text-left grid grid-cols-2 md:grid-cols-3 gap-4 text-sm"></div><div class="custom-scrollbar" style="max-height: 50vh; overflow-y: auto;"><table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase sticky-header"><tr><th class="px-4 py-3">Produto</th><th class="px-4 py-3 text-right">Quantidade</th><th class="px-4 py-3 text-right">Peso (Kg)</th><th class="px-4 py-3 text-right">Valor Unitário</th></tr></thead><tbody id="modal-table-body" class="divide-y divide-slate-700"></tbody></table></div><div id="modal-footer-total" class="p-6 border-t border-slate-700 flex justify-between items-center"></div></div></div>
+                        <div id="client-details-modal" class="modal-overlay hidden"><div class="bg-slate-800 rounded-lg shadow-2xl max-w-2xl w-full m-4"><div class="p-6 border-b border-slate-700 flex justify-between items-center"><h2 class="text-xl font-bold text-white">Resumo Cadastral</h2><button id="client-modal-close-btn" class="text-slate-400 hover:text-white text-3xl">&times;</button></div><div id="client-modal-content" class="p-6"></div></div></div>
+                        <div id="holiday-modal" class="modal-overlay hidden">
+                            <div class="bg-slate-800 rounded-lg shadow-2xl max-w-xs w-full m-4">
+                                <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+                                    <h2 class="text-lg font-bold text-white">Selecionar Feriados</h2>
+                                    <button id="holiday-modal-close-btn" class="text-slate-400 hover:text-white text-3xl">&times;</button>
+                                </div>
+                                <div class="p-4">
+                                    <div id="calendar-container"></div>
+                                </div>
+                                <div class="p-4 border-t border-slate-700 text-right">
+                                    <button id="holiday-modal-done-btn" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Confirmar</button>
+                                </div>
+                            </div>
+                        </div>
+                        <script>
+                            const embeddedData = ${jsonDataString};
+                            document.addEventListener('DOMContentLoaded', () => {
+                                ${scriptLogic}
+                            });
+                        <\/script>
+                    </body>
+                    </html>
+                `;
+
+                const blob = new Blob([reportTemplate], { type: 'text/html' });
+                downloadLink.href = URL.createObjectURL(blob);
+                const today = new Date();
+                const formattedDate = today.toISOString().slice(0, 10);
+                downloadLink.download = `DASHBOARD PRIME-${formattedDate}.html`;
+            }
+        });
     </script>
 </body>
 </html>
+
 
