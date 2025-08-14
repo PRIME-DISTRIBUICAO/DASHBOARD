@@ -111,7 +111,7 @@
                             let decodedData;
                             try {
                                 decodedData = new TextDecoder('utf-8').decode(new Uint8Array(data));
-                                if (decodedData.includes(' ')) { 
+                                if (decodedData.includes('')) { 
                                     throw new Error('UTF-8 decoding failed, trying ISO-8859-1');
                                 }
                             } catch (e) {
@@ -399,7 +399,7 @@
     </script>
 
     <script id="report-logic-script" type="text/template">
-                const allSalesData = embeddedData.detailed;
+        const allSalesData = embeddedData.detailed;
         const allHistoryData = embeddedData.history;
         const aggregatedOrders = embeddedData.byOrder;
         const allClientsData = embeddedData.clients;
@@ -509,8 +509,6 @@
         const weeklyComparisonChartContainer = document.getElementById('weeklyComparisonChartContainer');
         const monthlyComparisonChartContainer = document.getElementById('monthlyComparisonChartContainer');
         
-        const filialFilter = document.getElementById('filial-filter');
-
         // NOVOS ELEMENTOS DA TELA DE ESTOQUE
         const stockFilialFilter = document.getElementById('stock-filial-filter');
         const stockSupplierFilterBtn = document.getElementById('stock-supplier-filter-btn');
@@ -970,7 +968,6 @@
             comparisonSupervisorFilter.value = ''; 
             currentComparisonFornecedor = ''; 
             comparisonCityFilter.value = ''; 
-            filialFilter.value = 'ambas';
             selectedComparisonSellers = [];
             selectedComparisonSuppliers = [];
             selectedComparisonProducts = [];
@@ -1316,39 +1313,6 @@
             return positiveClients;
         }
 
-        function getMonthlyPositiveClientsCountWithNewLogic(salesData, pasta) {
-            const salesByMonthByClient = {};
-
-            salesData.forEach(sale => {
-                if (!sale.CODCLI) return;
-                const saleDate = parseDate(sale.DTPED);
-                if (saleDate) {
-                    const monthKey = `${saleDate.getFullYear()}-${saleDate.getMonth()}`;
-                    if (!salesByMonthByClient[monthKey]) {
-                        salesByMonthByClient[monthKey] = new Map();
-                    }
-                    const clientSales = salesByMonthByClient[monthKey].get(sale.CODCLI) || 0;
-                    salesByMonthByClient[monthKey].set(sale.CODCLI, clientSales + sale.VLVENDA);
-                }
-            });
-
-            let totalPositiveClientsSum = 0;
-            const threshold = pasta === 'PEPSICO' ? 50 : (pasta === 'MULTIMARCAS' ? 1 : 0);
-
-            for (const monthKey in salesByMonthByClient) {
-                const clientTotals = salesByMonthByClient[monthKey];
-                let positiveClientsInMonth = 0;
-                for (const total of clientTotals.values()) {
-                    if (total > threshold) {
-                        positiveClientsInMonth++;
-                    }
-                }
-                totalPositiveClientsSum += positiveClientsInMonth;
-            }
-
-            return totalPositiveClientsSum;
-        }
-
         function getSundayBasedWeeks(year, month) {
             const weeks = [];
             const firstDayOfMonth = new Date(year, month, 1);
@@ -1565,7 +1529,7 @@
 
 
         function getActiveStockMap(filial) {
-            const filterValue = filial || filialFilter.value;
+            const filterValue = filial || stockFilialFilter.value;
             if (filterValue === '05') {
                 return stockData05;
             }
@@ -1583,37 +1547,37 @@
             const filteredData = getComparisonFilteredData();
             const { currentSales, historySales } = filteredData;
             
-            const historyTotalFat = historySales.reduce((sum, item) => sum + item.VLVENDA, 0);
+            const historyMonthsCount = getUniqueMonthCount(historySales);
+
+            // --- Current Period KPIs ---
             const currentTotalFat = currentSales.reduce((sum, item) => sum + item.VLVENDA, 0);
-            const historyTotalPeso = historySales.reduce((sum, item) => sum + item.TOTPESOLIQ, 0);
             const currentTotalPeso = currentSales.reduce((sum, item) => sum + item.TOTPESOLIQ, 0);
-            
             const pasta = currentComparisonFornecedor;
             const currentClients = getPositiveClientsWithNewLogic(currentSales, pasta);
-            const historyClientsTotalPerMonthSum = getMonthlyPositiveClientsCountWithNewLogic(historySales, pasta);
-
-            const historyMonthsCount = getUniqueMonthCount(historySales);
-            const historyClientsAverage = historyMonthsCount > 0 ? historyClientsTotalPerMonthSum / historyMonthsCount : 0;
-            
             const currentTicket = currentClients > 0 ? currentTotalFat / currentClients : 0;
-            const historyTicketAverage = historyClientsTotalPerMonthSum > 0 ? historyTotalFat / historyClientsTotalPerMonthSum : 0;
-            
             const pepsicoCodfors = ['707', '708'];
             const saltyCategories = ['CHEETOS', 'DORITOS', 'FANDANGOS', 'RUFFLES', 'TORCIDA'];
             const foodsCategories = ['TODDY', 'TODDYNHO', 'QUAKER', 'KEROCOCO'];
-
             const currentMixPepsico = calculateAverageMixComDevolucao(currentSales, pepsicoCodfors);
-            const historyMixPepsico = monthlyKpiAverage(historySales, calculateAverageMixComDevolucao, pepsicoCodfors);
-
             const currentPositivacaoSalty = calculatePositivacaoPorCestaComDevolucao(currentSales, saltyCategories);
-            const historyPositivacaoSalty = monthlyKpiAverage(historySales, calculatePositivacaoPorCestaComDevolucao, saltyCategories);
-
             const currentPositivacaoFoods = calculatePositivacaoPorCestaComDevolucao(currentSales, foodsCategories);
+
+            // --- History Period KPIs (using monthly averages for consistency) ---
+            const historyTotalFat = historySales.reduce((sum, item) => sum + item.VLVENDA, 0);
+            const historyTotalPeso = historySales.reduce((sum, item) => sum + item.TOTPESOLIQ, 0);
+
+            const historyAvgFat = historyMonthsCount > 0 ? historyTotalFat / historyMonthsCount : 0;
+            const historyAvgPeso = historyMonthsCount > 0 ? historyTotalPeso / 1000 / historyMonthsCount : 0;
+            
+            const historyClientsAverage = monthlyKpiAverage(historySales, getPositiveClientsWithNewLogic, pasta);
+            const historyTicketAverage = historyClientsAverage > 0 ? historyAvgFat / historyClientsAverage : 0;
+            const historyMixPepsico = monthlyKpiAverage(historySales, calculateAverageMixComDevolucao, pepsicoCodfors);
+            const historyPositivacaoSalty = monthlyKpiAverage(historySales, calculatePositivacaoPorCestaComDevolucao, saltyCategories);
             const historyPositivacaoFoods = monthlyKpiAverage(historySales, calculatePositivacaoPorCestaComDevolucao, foodsCategories);
 
             renderKpiCards([ 
-                { title: 'Faturamento Total', current: currentTotalFat, history: historyTotalFat / historyMonthsCount, format: 'currency' }, 
-                { title: 'Peso Total (Ton)', current: currentTotalPeso / 1000, history: historyTotalPeso / 1000 / historyMonthsCount, format: 'decimal' }, 
+                { title: 'Faturamento Total', current: currentTotalFat, history: historyAvgFat, format: 'currency' }, 
+                { title: 'Peso Total (Ton)', current: currentTotalPeso / 1000, history: historyAvgPeso, format: 'decimal' }, 
                 { title: 'Clientes Atendidos', current: currentClients, history: historyClientsAverage, format: 'integer' }, 
                 { title: 'Ticket Médio', current: currentTicket, history: historyTicketAverage, format: 'currency' },
                 { title: 'Mix por PDV (Pepsico)', current: currentMixPepsico, history: historyMixPepsico, format: 'mix' },
@@ -2049,7 +2013,7 @@
                 `;
             }).join('');
             
-            // Lógica para os gráficos da tela de estoque (a ser implementada)
+            // Lógica para os gráficos da tela de estoque
             const stockBySupplier = {};
             tableData.forEach(item => {
                  stockBySupplier[item.fornecedor] = (stockBySupplier[item.fornecedor] || 0) + item.stock;
@@ -2318,12 +2282,11 @@
             };
 
             comparisonSupervisorFilter.addEventListener('change', handleComparisonFilterChange);
-            filialFilter.addEventListener('change', handleComparisonFilterChange);
             comparisonVendedorFilterBtn.addEventListener('click', () => comparisonVendedorFilterDropdown.classList.toggle('hidden'));
             comparisonVendedorFilterDropdown.addEventListener('change', (e) => { if (e.target.type === 'checkbox') { const { value, checked } = e.target; if (checked) selectedComparisonSellers.push(value); else selectedComparisonSellers = selectedComparisonSellers.filter(s => s !== value); handleComparisonFilterChange(); } });
             comparisonFornecedorToggleContainer.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') { const fornecedor = e.target.dataset.fornecedor; if (currentComparisonFornecedor === fornecedor) { currentComparisonFornecedor = ''; e.target.classList.remove('active'); } else { currentComparisonFornecedor = fornecedor; comparisonFornecedorToggleContainer.querySelectorAll('.fornecedor-btn').forEach(b => b.classList.remove('active')); e.target.classList.add('active'); } handleComparisonFilterChange(); } });
             comparisonSupplierFilterBtn.addEventListener('click', () => comparisonSupplierFilterDropdown.classList.toggle('hidden'));
-            comparisonSupplierFilterDropdown.addEventListener('change', (e) => { if (e.target.type === 'checkbox') { const { value, checked } = e.target; if (checked) selectedComparisonSuppliers.push(value); else selectedComparisonSuppliers = selectedComparisonSuppliers.filter(s => s !== value); handleComparisonFilterChange(); } });
+            comparisonSupplierFilterDropdown.addEventListener('change', (e) => { if (e.target.type === 'checkbox' && e.target.dataset.filterType === 'comparison') { const { value, checked } = e.target; if (checked) selectedComparisonSuppliers.push(value); else selectedComparisonSuppliers = selectedComparisonSuppliers.filter(s => s !== value); handleComparisonFilterChange(); } });
             
             comparisonComRedeBtn.addEventListener('click', () => comparisonRedeFilterDropdown.classList.toggle('hidden'));
             comparisonRedeGroupContainer.addEventListener('click', (e) => {
@@ -2392,7 +2355,7 @@
                 }
             });
             comparisonProductFilterDropdown.addEventListener('change', (e) => {
-                if(handleProductFilterChange(e, selectedComparisonProducts)) {
+                if(e.target.dataset.filterType === 'comparison' && handleProductFilterChange(e, selectedComparisonProducts)) {
                     handleComparisonFilterChange();
                     updateComparisonProductFilter();
                 }
@@ -2918,6 +2881,7 @@
     </script>
 </body>
 </html>
+
 
 
 
